@@ -3,5 +3,6 @@ Immigrants and refugees face numerous challenges when settling in a new country,
 
 ## Installation
 - Add API keys to ENV file  
+- Add `firebase-credentials.js`
 - `pip install -r requirements`  
 - `reflex run`  

@@ -1,5 +1,5 @@
 import reflex as rx
-from openai import AsyncOpenAI
+from groq import Groq
 import google.generativeai as genai
 import os
 import json
@@ -29,22 +29,25 @@ class State(rx.State):
         "What is your current zipcode?"
     ]
 
+    question_verification: list[str] = [
+        "A valid user response can be any repsonse that includes a specific visa, or a general immigrant status, or a general status like 'citizen' or 'permanent resident'"
+    ]
     # Keep track of the chat history as a list of (question, answer) tuples.
     chat_history: list[tuple[str, str]] = [("", greeting_message), ("", "What's your current immigration status?")]
 
     # Index of the current question
     current_question_index: int = 0
 
-    async def verify_input(self, question: str, answer: str) -> tuple[bool, str]:
-        client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    def verify_input(self, question: str, answer: str) -> tuple[bool, str]:
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-        response = await client.chat.completions.create(
-            model="gpt-4",  # Use the appropriate model
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",  # Use the appropriate model
             messages=[
-                {"role": "system", "content": "You are a very understanding and empathetic AI assistant verifying user input for an immigration survey. Respond with only the word 'valid' verbatim if the input is appropriate for the question, otherwise explain to the user what they should type instead very empathetically and very clearly. Assume these individuals don't speak English as a first language."},
-                {"role": "user", "content": f"Question: {question}\nUser's answer: {answer}\nIs this a valid response?"}
+                {"role": "system", "content": f"You are a very understanding and empathetic AI assistant verifying user input for an immigration survey. Respond with ONLY the word 'Valid' verbatim if the input is appropriate for the question, otherwise explain to the user what they should type instead very empathetically and very clearly and with examples. Assume these individuals don't speak English as a first language. The question asked is {question}\n."},
+                {"role": "user", "content": f"{answer}\n Is this a valid response?"}
             ],
-            temperature=1.2
+            temperature=1.0,
         )
         
         verification_result = response.choices[0].message.content
@@ -63,27 +66,27 @@ class State(rx.State):
         self.current_question_index = 0
 
     async def get_skills(self, skills_text: str) -> list[str]:
-        client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-        response = await client.chat.completions.create(
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": "You are an advanced AI assistant. The user has listed skills as part of a survey. Your task is to extract the individual skills from their response and output them as an array of skills."},
                 {"role": "user", "content": f"Extract the skills from the following text: {skills_text}, in an array"}
             ],
-            temperature=1.2
+            temperature=1.2,
         )
         skills_array = json.loads(response.choices[0].message.content)
         return skills_array
 
     async def answer(self):
-        client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
         if not self.question:
             return
         
         # Verify user input
-        validity, interpretation = await self.verify_input(self.questions[self.current_question_index], self.question)
+        validity, interpretation = self.verify_input(self.questions[self.current_question_index], self.question)
         if not validity:
             # self.chat_history.append((self.questions[self.current_question_index], self.question))  # Store invalid response
             self.chat_history.append((self.question, ""))
@@ -103,8 +106,8 @@ class State(rx.State):
             system_message = "Thank the user for completing the survey and provide a brief summary of their responses."
 
         # AI generates a response for the next question or closing
-        session = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        session = client.chat.completions.create(
+            model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": "You are a very understanding, compassionate, and empathetic AI assistant conducting an immigration survey. Provide helpful responses based on the user's answers."},
                 {"role": "user", "content": f"User's response to '{self.questions[self.current_question_index]}': {self.question}"},
@@ -122,7 +125,7 @@ class State(rx.State):
         self.question = ""
         yield  # Clear the frontend input before continuing
 
-        async for item in session:
+        for item in session:
             if hasattr(item.choices[0].delta, "content"):
                 if item.choices[0].delta.content is None:
                     break
@@ -141,7 +144,7 @@ class State(rx.State):
         elif self.current_question_index == 2:
             self.education = self.prev_question
         elif self.current_question_index == 3:
-            self.skills = await self.get_skills(answer)
+            self.skills = self.get_skills(answer)
         else:
             self.location = self.prev_question
 
