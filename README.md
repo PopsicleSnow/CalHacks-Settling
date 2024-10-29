@@ -6,3 +6,9 @@ Immigrants and refugees face numerous challenges when settling in a new country,
 - Add `firebase-credentials.js`
 - `pip install -r requirements`  
 - `reflex run`  
+
+## TODO
+- delete firebase and use the same project as gemini
+- refactor lazy loading
+- fresh ui
+- add translation feature
